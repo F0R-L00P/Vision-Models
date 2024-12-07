@@ -20,7 +20,7 @@ from helper_functions import train, validate, set_seed
 #######################
 random_seed = 1818
 batch_size = 32
-num_epochs = 50
+num_epochs = 10
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print("Using device:", device)
 
@@ -45,7 +45,7 @@ train_transform = torchvision.transforms.Compose(
 
 test_transform = torchvision.transforms.Compose(
     [
-        torchvision.transforms.CenterCrop((32, 32)),  # Keep size consistent
+        #        torchvision.transforms.CenterCrop((32, 32)),  # Keep size consistent
         torchvision.transforms.ToTensor(),
         torchvision.transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
     ]
@@ -161,7 +161,7 @@ print("Output shape:", output.shape)  # Should be [1, 10]
 model = VGG16(num_classes=10).to(device)
 criterion = torch.nn.CrossEntropyLoss()  # CrossEntropyLoss includes softmax
 optimizer = optim.Adam(
-    model.parameters(), lr=0.001
+    model.parameters(), lr=0.0001
 )  # Adam optimizer with a learning rate
 
 # Training loop

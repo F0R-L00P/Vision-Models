@@ -255,7 +255,7 @@ plt.tight_layout()
 plt.show()
 
 ##########################################################
-###########################confusion matrix&F1 score#####
+###############confusion matrix&F1 score#################
 ##########################################################
 from sklearn.metrics import confusion_matrix, classification_report
 

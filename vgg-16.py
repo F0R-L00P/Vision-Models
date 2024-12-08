@@ -1,7 +1,8 @@
 # bsic libraries
 import numpy as np
-import matplotlib as plt
 from tqdm import tqdm
+import matplotlib.pyplot as plt
+from IPython.display import clear_output
 
 from PIL import Image
 
@@ -15,12 +16,14 @@ from torch.utils.data import DataLoader
 # designed libraries
 from helper_functions import train, validate, set_seed
 
+# %matplotlib inline
+
 #######################
 ###### Settings#########
 #######################
 random_seed = 1818
 batch_size = 32
-num_epochs = 10
+num_epochs = 20
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print("Using device:", device)
 
@@ -37,7 +40,11 @@ set_seed(random_seed)
 #######################
 train_transform = torchvision.transforms.Compose(
     [
-        torchvision.transforms.RandomCrop((32, 32)),  # Keep size consistent
+        torchvision.transforms.RandomCrop(32, padding=4),  # common CIFAR-10 practice
+        torchvision.transforms.RandomHorizontalFlip(),
+        torchvision.transforms.ColorJitter(
+            brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1
+        ),
         torchvision.transforms.ToTensor(),
         torchvision.transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
     ]
@@ -125,10 +132,10 @@ class VGG16(torch.nn.Module):
         self.classifier = torch.nn.Sequential(
             torch.nn.Linear(512, 4096),  # Adjusted input size
             torch.nn.ReLU(),
-            torch.nn.Dropout(),
+            torch.nn.Dropout(0.5),
             torch.nn.Linear(4096, 4096),
             torch.nn.ReLU(),
-            torch.nn.Dropout(),
+            torch.nn.Dropout(0.5),
             torch.nn.Linear(4096, num_classes),
         )
 
@@ -143,48 +150,139 @@ class VGG16(torch.nn.Module):
 
 ###################### TEST
 # Initialize the model
-model = VGG16(num_classes=10).to(device)
+# model = VGG16(num_classes=10).to(device)
 
 # Generate random input
-random_input = torch.randn(1, 3, 32, 32).to(device)
+# random_input = torch.randn(1, 3, 32, 32).to(device)
 
 # Forward pass
-output = model(random_input)
+# output = model(random_input)
 
 # Check the output
-print("Output shape:", output.shape)  # Should be [1, 10]
+# print("Output shape:", output.shape)  # Should be [1, 10]
 
 #########################################
 ########### Training the model ##########
 #########################################
 # Define the model, loss, and optimizer
 model = VGG16(num_classes=10).to(device)
-criterion = torch.nn.CrossEntropyLoss()  # CrossEntropyLoss includes softmax
-optimizer = optim.Adam(
-    model.parameters(), lr=0.0001
-)  # Adam optimizer with a learning rate
+criterion = torch.nn.CrossEntropyLoss()
+optimizer = optim.Adam(model.parameters(), lr=0.0001)
 
-# Training loop
+# Lists to store the history of accuracies and losses
+train_acc_history = []
+val_acc_history = []
+train_loss_history = []
+val_loss_history = []
+
 best_accuracy = 0.0
+
 for epoch in range(num_epochs):
+    # Clear the output at the start of the epoch to have a "live" effect
+    #    clear_output(wait=True)
     print(f"Epoch {epoch + 1}/{num_epochs}")
 
+    # Train and validate
     train_loss, train_accuracy = train(
         model, train_loader, optimizer, criterion, device
     )
     val_loss, val_accuracy = validate(model, test_loader, criterion, device)
 
+    # Store the metrics
+    train_loss_history.append(train_loss)
+    val_loss_history.append(val_loss)
+    train_acc_history.append(train_accuracy)
+    val_acc_history.append(val_accuracy)
+
+    # Print metrics to the terminal
     print(f"Train Loss: {train_loss:.4f}, Train Accuracy: {train_accuracy:.2f}%")
     print(f"Validation Loss: {val_loss:.4f}, Validation Accuracy: {val_accuracy:.2f}%")
 
-    # Save the best model
-    if val_accuracy > best_accuracy:
-        best_accuracy = val_accuracy
-        torch.save(model.state_dict(), "vgg16_best.pth")
-        print("Best model saved!")
+    # Plot the metrics
+    plt.figure(figsize=(10, 5))
 
-print(f"Training complete. Best validation accuracy: {best_accuracy:.2f}%")
+    plt.subplot(1, 2, 1)
+    plt.plot(train_loss_history, label="Train Loss", color="blue")
+    plt.plot(val_loss_history, label="Val Loss", color="orange")
+    plt.title("Loss vs. Epoch")
+    plt.xlabel("Epoch")
+    plt.ylabel("Loss")
+    plt.legend()
 
+    plt.subplot(1, 2, 2)
+    plt.plot(train_acc_history, label="Train Acc", color="blue")
+    plt.plot(val_acc_history, label="Val Acc", color="orange")
+    plt.title("Accuracy vs. Epoch")
+    plt.xlabel("Epoch")
+    plt.ylabel("Accuracy (%)")
+    plt.legend()
+    plt.tight_layout()
+    plt.show()
+
+test_loss, test_accuracy = validate(model, test_loader, criterion, device)
+print(f"Final Test Loss: {test_loss:.4f}, Test Accuracy: {test_accuracy:.2f}%")
+####################################################
+################visual inspection##################
+####################################################
+# Get one batch of images and their labels from the test loader
+inputs, labels = next(iter(test_loader))
+inputs, labels = inputs.to(device), labels.to(device)
+
+# Pass them through the model
+model.eval()
+with torch.no_grad():
+    outputs = model(inputs)
+_, preds = torch.max(outputs, 1)
+
+classes = test_set.classes  # CIFAR-10 class names
+
+# Set up a 4x8 grid for plotting 32 images
+fig, axes = plt.subplots(4, 8, figsize=(20, 10))
+axes = axes.flatten()  # Flatten the array of axes for easy indexing
+
+# We'll show the first 32 images from the batch
+for idx in range(32):
+    img = inputs[idx].cpu().numpy().transpose((1, 2, 0))
+    # Unnormalize the image (since we used mean=0.5, std=0.5)
+    img = img * 0.5 + 0.5
+    img = np.clip(img, 0, 1)  # Ensuring pixel values are between 0 and 1
+
+    axes[idx].imshow(img)
+    axes[idx].set_title(f"Pred: {classes[preds[idx]]}\nLabel: {classes[labels[idx]]}")
+    axes[idx].axis("off")
+
+plt.tight_layout()
+plt.show()
+
+##########################################################
+###########################confusion matrix&F1 score#####
+##########################################################
+from sklearn.metrics import confusion_matrix, classification_report
+
+# make sure model weights are locked
+model.eval()
+
+all_preds = []
+all_labels = []
+
+with torch.no_grad():
+    for inputs, labels in test_loader:
+        inputs = inputs.to(device)
+        outputs = model(inputs)
+        _, preds = torch.max(outputs, 1)
+        all_preds.extend(preds.cpu().numpy())
+        all_labels.extend(labels.numpy())
+
+# Compute confusion matrix
+cm = confusion_matrix(all_labels, all_preds)
+print("Confusion Matrix:")
+print(cm)
+
+# Classification report
+print("Classification Report:")
+print(classification_report(all_labels, all_preds))
+####################################################################
+####################################################################
 # Create a checkpoint dictionary
 checkpoint = {
     "epoch": epoch,
@@ -196,4 +294,3 @@ checkpoint = {
 
 # Save the checkpoint
 torch.save(checkpoint, "vgg16_checkpoint.pth")
-print("Training complete. Model and optimizer saved successfully.")
